@@ -17,6 +17,7 @@ except ImportError:
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import aiofiles
@@ -40,11 +41,12 @@ app = FastAPI(
 )
 
 # Configure CORS with environment variable support
-cors_origins = os.getenv("CORS_ORIGINS", '["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]')
+# Allow all origins for production deployment (frontend served from same domain)
+cors_origins = os.getenv("CORS_ORIGINS", '["*"]')
 try:
     cors_origins_list = json.loads(cors_origins)
 except (json.JSONDecodeError, TypeError):
-    cors_origins_list = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
+    cors_origins_list = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -254,19 +256,45 @@ async def health_check():
     }
 
 
+# ── Serve Frontend Static Files ──
+# Mount React build folder as static files
+frontend_build = os.path.join(os.path.dirname(__file__), "frontend", "build")
+if os.path.isdir(frontend_build):
+    app.mount("/static", StaticFiles(directory=os.path.join(frontend_build, "static")), name="static")
+
+
 @app.get("/")
-async def root():
-    """Root endpoint with API info."""
+async def serve_frontend():
+    """Serve React frontend index.html"""
+    index_file = os.path.join(os.path.dirname(__file__), "frontend", "build", "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
     return {
         "name": "Quiz Converter API",
         "version": "1.0.0",
+        "message": "Frontend not built. Please run: npm run build in frontend/ folder",
         "endpoints": {
             "convert": "POST /api/convert/",
             "download": "GET /api/download/{file_id}",
             "history": "GET /api/history/",
-            "health": "GET /api/health/"
+            "health": "GET /api/health/",
+            "docs": "/docs"
         }
     }
+
+
+# Catch-all route for React Router (serve index.html for all non-API routes)
+@app.get("/{path:path}")
+async def serve_spa(path: str):
+    """Serve React SPA - return index.html for all non-API routes"""
+    # Don't catch API routes
+    if path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    index_file = os.path.join(os.path.dirname(__file__), "frontend", "build", "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend not found")
 
 
 if __name__ == "__main__":
