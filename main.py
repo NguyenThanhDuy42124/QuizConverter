@@ -5,11 +5,14 @@ Endpoints: POST /api/convert/ and GET /api/download/{file_id}
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environment variables
-env_path = Path(__file__).parent / ".env"
-load_dotenv(env_path)
+# Load environment variables (optional)
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    load_dotenv(env_path)
+except ImportError:
+    pass  # dotenv not installed, use system env vars
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, Form
 from fastapi.responses import FileResponse, JSONResponse
