@@ -1,19 +1,23 @@
 """
 Database configuration and session management for SQLAlchemy.
-Supports async operations with MySQL 8.
+Supports async operations with SQLite via aiosqlite.
 """
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Load environment variables (optional)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-# Database URL configuration
+# Database URL configuration - Default to SQLite
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+aiomysql://root:root@localhost/quiz_converter"
+    "sqlite+aiosqlite:///./quiz_converter.db"
 )
 
 # Create async engine
