@@ -1,48 +1,36 @@
 """
-Quiz Converter API - Production Entry Point
-Compatible with container deployment
-Startup command: python /home/container/app.py
+Quiz Converter – Entry point for PikaMC / Pterodactyl Python Egg hosting.
+
+This script:
+1. Syncs code from GitHub (git fetch + reset --hard)
+2. Installs Python dependencies from requirements.txt
+3. Starts the FastAPI server via uvicorn
+
+Pterodactyl auto-installs requirements.txt, then runs this file.
 """
-
-import os
+import subprocess
 import sys
-from pathlib import Path
+import os
 
-# Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(env_path)
-except ImportError:
-    pass
+# ── Force sync with GitHub (fixes Pterodactyl git pull conflicts) ──
+project_root = os.path.dirname(os.path.abspath(__file__))
+if os.path.isdir(os.path.join(project_root, ".git")):
+    print("==> Syncing code from GitHub...")
+    try:
+        subprocess.run(["git", "fetch", "origin"], cwd=project_root, timeout=30)
+        subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=project_root, timeout=30)
+        print("==> Code synced successfully!")
+    except Exception as e:
+        print(f"==> Git sync skipped: {e}")
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Get port from environment variable (Pterodactyl sets SERVER_PORT or PORT)
+port = os.environ.get("SERVER_PORT") or os.environ.get("PORT") or "8000"
 
-# Import FastAPI app from main module
-from main import app
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    # Configuration from environment variables or defaults
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", 8000))
-    workers = int(os.getenv("API_WORKERS", 1))  # Default 1 for container
-    debug = os.getenv("DEBUG", "False").lower() == "true"
-    
-    print(f"🚀 Starting Quiz Converter API")
-    print(f"   Host: {host}")
-    print(f"   Port: {port}")
-    print(f"   Workers: {workers}")
-    print(f"   Debug: {debug}")
-    
-    # Run with Uvicorn
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        workers=workers if not debug else 1,
-        reload=debug,  # Reload only in debug mode
-        log_level="debug" if debug else "info"
-    )
+# Start FastAPI server from the project root
+print(f"==> Starting Quiz Converter API on port {port}...")
+subprocess.call([
+    sys.executable, "-m", "uvicorn",
+    "main:app",
+    "--host", "0.0.0.0",
+    "--port", str(port),
+])
