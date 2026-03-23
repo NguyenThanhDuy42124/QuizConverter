@@ -7,7 +7,7 @@ node_modules/
 /coverage
 
 # Production
-/build
+# /build - Commented to allow serving frontend build in production
 
 # Misc
 .DS_Store
