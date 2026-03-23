@@ -11,7 +11,24 @@ const TextResultPanel = ({ textContent, isLoading, compactMode = false }) => {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(textContent);
+      // Try modern Clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textContent);
+      } else {
+        // Fallback for HTTP or older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = textContent;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        if (!success) {
+          throw new Error('Không thể sao chép! Vui lòng thử lại.');
+        }
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
