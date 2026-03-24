@@ -7,6 +7,7 @@ import './App.css';
 import HtmlInputPanel from './components/HtmlInputPanel';
 import TextResultPanel from './components/TextResultPanel';
 import WordExport from './components/WordExport';
+import Footer from './components/Footer';
 import { convertHTML, healthCheck } from './api';
 
 function App() {
@@ -142,9 +143,7 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="app-footer">
-        <p>Quiz Converter v1.0 | Chuyên chuyển đổi đề thi trắc nghiệm</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

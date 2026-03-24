@@ -83,6 +83,7 @@ body {
 
 .status.connected {
   color: #28a745;
+  background: white;
 }
 
 .status.disconnected {
@@ -217,16 +218,6 @@ body {
   padding: 1.5rem;
   border-radius: 8px;
   box-shadow: var(--shadow);
-}
-
-/* Footer */
-.app-footer {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  text-align: center;
-  padding: 1.5rem;
-  margin-top: auto;
-  font-size: 0.9rem;
 }
 
 /* Responsive */

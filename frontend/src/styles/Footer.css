@@ -1,0 +1,51 @@
+/* Footer Styles */
+
+.app-footer {
+  background-color: #1a1f2e;
+  border-top: 1px solid #2d3748;
+  padding: 2rem 1rem;
+  margin-top: 4rem;
+  text-align: center;
+  color: #a0aec0;
+  font-size: 0.875rem;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.footer-tech {
+  margin: 0 0 0.5rem 0;
+  color: #cbd5e0;
+  font-size: 0.875rem;
+}
+
+.footer-credit {
+  margin: 0;
+  color: #a0aec0;
+  font-size: 0.8rem;
+}
+
+.footer-credit a {
+  color: #4299e1;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-credit a:hover {
+  color: #63b3ed;
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .app-footer {
+    padding: 1.5rem 1rem;
+    margin-top: 2rem;
+  }
+
+  .footer-tech,
+  .footer-credit {
+    font-size: 0.8rem;
+  }
+}
