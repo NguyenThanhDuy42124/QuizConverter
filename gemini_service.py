@@ -22,9 +22,9 @@ class GeminiService:
         quiz_text = ""
         
         for q in questions:
-            quiz_text += f"\nCâu {q['number']}: {q['text']}\n"
+            quiz_text += f"\nCâu {q['question_number']}: {q['question_text']}\n"
             for ans in q['answers']:
-                quiz_text += f"{ans['letter']}. {ans['text']}\n"
+                quiz_text += f"{ans['letter']}. {ans['content']}\n"
         
         return quiz_text
     
