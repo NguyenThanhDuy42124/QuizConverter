@@ -237,3 +237,112 @@ def parse_html_to_text_and_doc(
     question_count = len(questions)
     
     return text_output, doc_output, question_count
+
+
+def export_marked_text(questions: List[Dict], predictions: Dict[str, str]) -> str:
+    """
+    Export plain text with AI-predicted correct answers marked
+    
+    Args:
+        questions: List of parsed question dicts
+        predictions: Dict like {"question_1": "A", "question_2": "B"}
+        
+    Returns:
+        Plain text with marked answers
+    """
+    lines = ["ĐÁNH GIÁ BỞI AI - QUIZ CONVERTER", "=" * 40, ""]
+    
+    for i, question in enumerate(questions):
+        q_num = question['question_number']
+        q_text = question['question_text']
+        predicted = predictions.get(f"question_{q_num}", "?")
+        
+        lines.append(f"Câu {q_num}: {q_text}")
+        
+        for answer in question['answers']:
+            letter = answer['letter']
+            content = answer['content']
+            
+            # Mark if this is the AI's predicted answer
+            if letter == predicted:
+                lines.append(f"{letter}. {content} ✓ ĐÚNG")
+            else:
+                lines.append(f"{letter}. {content}")
+        
+        lines.append("")  # Blank line
+    
+    return '\n'.join(lines)
+
+
+def export_marked_docx(questions: List[Dict], predictions: Dict[str, str]) -> Document:
+    """
+    Export Word document with AI-predicted correct answers highlighted in green
+    
+    Args:
+        questions: List of parsed question dicts
+        predictions: Dict like {"question_1": "A", "question_2": "B"}
+        
+    Returns:
+        python-docx Document object
+    """
+    doc = Document()
+    
+    # Add title
+    title = doc.add_paragraph()
+    title_run = title.add_run("BÀI TRẮC NGHIỆM - ĐÁNH GIÁ BỞI AI")
+    title_run.font.size = Pt(16)
+    title_run.font.bold = True
+    title_run.font.color.rgb = RGBColor(0, 102, 204)  # Blue
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Add subtitle
+    subtitle = doc.add_paragraph()
+    subtitle_run = subtitle.add_run(f"Tổng cộng: {len(questions)} câu")
+    subtitle_run.font.size = Pt(11)
+    subtitle_run.font.italic = True
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph()  # Spacing
+    
+    # Add questions with marked answers
+    for question in questions:
+        q_num = question['question_number']
+        q_text = question['question_text']
+        predicted = predictions.get(f"question_{q_num}", "?")
+        
+        # Add question
+        q_paragraph = doc.add_paragraph(style='List Bullet')
+        q_run = q_paragraph.add_run(f"Câu {q_num}: ")
+        q_run.font.bold = True
+        q_run.font.size = Pt(11)
+        q_paragraph.add_run(q_text).font.size = Pt(11)
+        
+        # Add answers with color-coding for correct
+        for answer in question['answers']:
+            letter = answer['letter']
+            content = answer['content']
+            
+            a_paragraph = doc.add_paragraph(style='List Bullet 2')
+            a_paragraph.paragraph_format.left_indent = Inches(0.5)
+            
+            letter_run = a_paragraph.add_run(f"{letter}. ")
+            letter_run.font.size = Pt(11)
+            
+            content_run = a_paragraph.add_run(content)
+            content_run.font.size = Pt(11)
+            
+            # Highlight correct answer
+            if letter == predicted:
+                letter_run.font.color.rgb = RGBColor(0, 128, 0)  # Green
+                letter_run.font.bold = True
+                content_run.font.color.rgb = RGBColor(0, 128, 0)
+                
+                # Add checkmark
+                check_run = a_paragraph.add_run(" ✓ ĐÚNG")
+                check_run.font.bold = True
+                check_run.font.color.rgb = RGBColor(0, 128, 0)
+        
+        # Space between questions
+        doc.add_paragraph()
+    
+    return doc

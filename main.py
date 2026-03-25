@@ -29,8 +29,9 @@ import json
 from database import Base, engine, AsyncSessionLocal, init_db, dispose_engine
 from models import ConversionHistory
 from schemas import ConvertHTMLRequest, ConvertHTMLResponse, ConversionHistorySchema
-from converter import parse_html_to_text_and_doc
+from converter import parse_html_to_text_and_doc, export_marked_text, export_marked_docx
 from combinatorics import shuffle_quiz
+from gemini_service import GeminiService
 
 
 # Create FastAPI app
@@ -254,6 +255,184 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "service": "quiz-converter-api"
     }
+
+
+@app.post("/api/analyze-with-ai/")
+async def analyze_with_ai(request: ConvertHTMLRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Analyze quiz with Google Gemini AI to predict correct answers.
+    
+    Args:
+        request: HTML content to analyze
+        db: Database session
+        
+    Returns:
+        JSON with questions and AI predictions
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Get Gemini API key
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            raise HTTPException(
+                status_code=500, 
+                detail="GEMINI_API_KEY not configured on server"
+            )
+        
+        # Parse HTML
+        from converter import QuizParser
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="No questions found in HTML")
+        
+        # Initialize Gemini service
+        service = GeminiService(gemini_key)
+        
+        # Get AI predictions
+        predictions = await service.analyze_quiz(questions)
+        
+        # Attach predictions to questions
+        for q in questions:
+            q_num = q['question_number']
+            q['predicted_answer'] = predictions.get(f"question_{q_num}", "?")
+        
+        # Save to database
+        history = ConversionHistory(
+            html_input=request.html_content,
+            text_output=json.dumps(questions),  # Save structured data
+            word_document_path="",  # No file path for AI analysis
+            file_id=str(uuid.uuid4()),
+            question_count=len(questions),
+            is_shuffled=0,
+            shuffle_count=0,
+            metadata_json=json.dumps({
+                "analysis_type": "AI_POWERED",
+                "predictions": predictions
+            })
+        )
+        
+        db.add(history)
+        await db.commit()
+        
+        return {
+            "success": True,
+            "questions": questions,
+            "predictions": predictions,
+            "total_questions": len(questions),
+            "analysis_type": "AI_POWERED"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in analyze_with_ai: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export-marked-text/")
+async def export_marked_text_endpoint(request: ConvertHTMLRequest):
+    """
+    Export marked text file with AI predictions
+    
+    Args:
+        request: HTML content to convert and analyze
+        
+    Returns:
+        Plain text file with marked answers
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Get Gemini API key
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        
+        # Parse and analyze
+        from converter import QuizParser
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="No questions found")
+        
+        service = GeminiService(gemini_key)
+        predictions = await service.analyze_quiz(questions)
+        
+        # Export marked text
+        marked_text = export_marked_text(questions, predictions)
+        
+        # Return as downloadable text file
+        file_id = str(uuid.uuid4())
+        temp_path = os.path.join(TEMP_DIR, f"{file_id}_marked.txt")
+        
+        async with aiofiles.open(temp_path, 'w', encoding='utf-8') as f:
+            await f.write(marked_text)
+        
+        return FileResponse(
+            path=temp_path,
+            filename=f"quiz_marked_{file_id[:8]}.txt",
+            media_type="text/plain"
+        )
+    
+    except Exception as e:
+        print(f"Error in export_marked_text_endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export-marked-docx/")
+async def export_marked_docx_endpoint(request: ConvertHTMLRequest):
+    """
+    Export marked Word document with AI predictions
+    
+    Args:
+        request: HTML content to convert and analyze
+        
+    Returns:
+        Word (.docx) file with highlighted correct answers
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Get Gemini API key
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        
+        # Parse and analyze
+        from converter import QuizParser
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="No questions found")
+        
+        service = GeminiService(gemini_key)
+        predictions = await service.analyze_quiz(questions)
+        
+        # Export marked Word document
+        doc = export_marked_docx(questions, predictions)
+        
+        # Save to file
+        file_id = str(uuid.uuid4())
+        doc_path = os.path.join(TEMP_DIR, f"{file_id}_marked.docx")
+        doc.save(doc_path)
+        
+        return FileResponse(
+            path=doc_path,
+            filename=f"quiz_marked_{file_id[:8]}.docx",
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    
+    except Exception as e:
+        print(f"Error in export_marked_docx_endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Serve Frontend Static Files ──

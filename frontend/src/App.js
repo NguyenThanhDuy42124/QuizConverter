@@ -7,6 +7,7 @@ import './App.css';
 import HtmlInputPanel from './components/HtmlInputPanel';
 import TextResultPanel from './components/TextResultPanel';
 import WordExport from './components/WordExport';
+import AIAnalysisPanel from './components/AIAnalysisPanel';
 import Footer from './components/Footer';
 import { convertHTML, healthCheck } from './api';
 
@@ -18,6 +19,7 @@ function App() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [apiConnected, setApiConnected] = useState(false);
+  const [htmlInput, setHtmlInput] = useState('');  // Track current HTML input
 
   // Check API connection on mount
   useEffect(() => {
@@ -39,6 +41,7 @@ function App() {
       setIsLoading(true);
       setError(null);
       setSuccess(false);
+      setHtmlInput(options.htmlContent);  // Store HTML input for AI analysis
 
       const result = await convertHTML(
         options.htmlContent,
@@ -101,12 +104,20 @@ function App() {
             </div>
           )}
 
-          {/* Layout: Top Input + Middle Quick Copy/Download + Bottom Detailed */}
+          {/* Layout: Top Input + AI Analysis + Middle Quick Copy/Download + Bottom Detailed */}
           <div className="panels-layout">
             {/* Top: HTML Input */}
             <div className="input-section">
               <HtmlInputPanel onConvert={handleConvert} isLoading={isLoading} />
             </div>
+
+            {/* AI Analysis Section */}
+            {htmlInput && (
+              <AIAnalysisPanel 
+                htmlContent={htmlInput}
+                isLoading={isLoading}
+              />
+            )}
 
             {/* Middle: Quick Copy + Download */}
             {textResult && (
