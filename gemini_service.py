@@ -28,19 +28,26 @@ class GeminiService:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = None
         self.use_mock_mode = False
-        # Try models in order of preference: stable → fallback
-        # Note: v1beta API may not support all preview models
+        # Try models in order of preference: fast & accurate → powerful
+        # gemini-2.0-flash: Khuyên dùng mạnh cho trắc nghiệm (nhanh + logic tốt)
         self.models_to_try = [
-            "gemini-2.5-flash",          # Stable, recommended
-            "gemini-2.5-pro",            # Stable, more powerful
-            "gemini-pro",                # Fallback, old but reliable
+            "gemini-2.0-flash",          # Khuyên dùng: nhanh + logic tốt
+            "gemini-1.5-pro",            # Cho bài hardcore (Toán, Lý, Hóa)
+            "gemini-1.5-flash",          # Fallback
         ]
+        
+        # System instruction để ép AI chỉ trả về 1 chữ cái (A, B, C, D)
+        self.system_instruction = """Bạn là một chuyên gia giải trắc nghiệm.
+Nhiệm vụ của bạn là đọc câu hỏi và đưa ra đáp án đúng.
+CHỈ trả về một chữ cái duy nhất là A, B, C, hoặc D.
+TUYỆT ĐỐI không giải thích, không thêm dấu chấm câu hay bất kỳ từ ngữ nào khác.
+Ví dụ trả lời: A"""
         
         if self.api_key and HAS_GENAI:
             try:
                 # Initialize client with new SDK
                 self.client = genai.Client(api_key=self.api_key)
-                logger.info(f"✅ Gemini API (google-genai) initialized. Trying models: {', '.join(self.models_to_try)}")
+                logger.info(f"✅ Gemini API (google-genai) initialized with system_instruction. Trying models: {', '.join(self.models_to_try)}")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}. Falling back to mock mode.")
                 self.use_mock_mode = True
@@ -92,9 +99,11 @@ class GeminiService:
                 for model_name in self.models_to_try:
                     try:
                         logger.debug(f"[Q{question_num}] Trying model: {model_name}")
+                        # Use system_instruction to force single letter response
                         response = self.client.models.generate_content(
                             model=model_name,
-                            contents=formatted_prompt
+                            contents=formatted_prompt,
+                            system_instruction=self.system_instruction
                         )
                         logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
                         break
@@ -146,19 +155,14 @@ class GeminiService:
     
     def _format_question_for_gemini(self, question_text: str, answers: List[Dict]) -> str:
         """Format question for Gemini API."""
-        prompt = f"""Analyze this multiple choice question and determine the most likely correct answer.
+        prompt = f"""Câu hỏi: {question_text}
 
-QUESTION: {question_text}
-
-ANSWERS:
+Các đáp án:
 """
         for ans in answers:
             letter = ans.get('letter', '')
             content = ans.get('content', '')
             prompt += f"{letter}. {content}\n"
-        
-        prompt += """Based on your knowledge, which answer is most likely correct?
-Respond with ONLY the letter (A, B, C, or D) without explanation."""
         
         return prompt
     
