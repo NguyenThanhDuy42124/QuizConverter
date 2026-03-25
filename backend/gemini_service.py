@@ -1,6 +1,7 @@
 """
 Google Gemini AI Service for automatic quiz answer marking.
 Supports both real API mode and mock mode for development.
+Uses the new google-genai SDK.
 """
 
 import os
@@ -10,17 +11,13 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Try to import Google AI SDK
+# Try to import Google AI SDK (new)
 try:
     import google.genai as genai
     HAS_GENAI = True
 except ImportError:
-    try:
-        import google.generativeai as genai
-        HAS_GENAI = True
-    except ImportError:
-        HAS_GENAI = False
-        logger.warning("google-genai not installed. Running in mock mode.")
+    HAS_GENAI = False
+    logger.warning("google-genai not installed. Running in mock mode.")
 
 
 class GeminiService:
@@ -29,15 +26,15 @@ class GeminiService:
     def __init__(self):
         """Initialize Gemini service with API key from environment."""
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model = None
+        self.client = None
         self.use_mock_mode = False
         
         if self.api_key and HAS_GENAI:
             try:
+                # Configure with new google-genai SDK
                 genai.configure(api_key=self.api_key)
-                # Try different model options - prefer stable models
-                self.model = genai.GenerativeModel('gemini-pro')
-                logger.info("✅ Gemini API configured successfully with gemini-pro")
+                self.client = genai
+                logger.info("✅ Gemini API (google-genai) configured successfully")
             except Exception as e:
                 logger.warning(f"Failed to configure Gemini API: {e}. Falling back to mock mode.")
                 self.use_mock_mode = True
@@ -57,7 +54,7 @@ class GeminiService:
         Returns:
             Dictionary with predictions for each question
         """
-        if self.use_mock_mode or not self.model:
+        if self.use_mock_mode or not self.client:
             return self._mock_analyze(questions)
         
         try:
@@ -69,7 +66,10 @@ class GeminiService:
     def _real_analyze(self, questions: List[Dict]) -> Dict:
         """Perform real analysis using Gemini API."""
         predictions = {}
-        answers_options = ['A', 'B', 'C', 'D']  # Common answer choices
+        answers_options = ['A', 'B', 'C', 'D']
+        
+        # Try multiple models in order of preference
+        models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
         
         for q in questions:
             try:
@@ -82,23 +82,37 @@ class GeminiService:
                     question_text, answers
                 )
                 
-                # Call Gemini API
-                response = self.model.generate_content(formatted_question)
+                # Try each model until one works
+                response = None
+                for model_name in models_to_try:
+                    try:
+                        response = self.client.GenerativeModel(model_name).generate_content(
+                            formatted_question
+                        )
+                        logger.debug(f"[{model_name}] Q{question_num}: Success")
+                        break
+                    except Exception as model_err:
+                        logger.debug(f"[{model_name}] Q{question_num}: {str(model_err)}")
+                        continue
                 
-                # Parse response
-                predicted_answer = self._parse_gemini_response(response.text, answers_options)
-                
-                if predicted_answer:
-                    predictions[question_num] = predicted_answer
-                    logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                if response:
+                    # Parse response
+                    predicted_answer = self._parse_gemini_response(response.text, answers_options)
+                    
+                    if predicted_answer:
+                        predictions[question_num] = predicted_answer
+                        logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                    else:
+                        predictions[question_num] = 'A'
+                        logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
                 else:
-                    # Fallback to first option if prediction fails
+                    # All models failed
                     predictions[question_num] = 'A'
-                    logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
+                    logger.warning(f"Q{question_num}: All models failed, using 'A'")
             
             except Exception as e:
                 logger.error(f"Error analyzing question {question_num}: {e}")
-                predictions[question_num] = 'A'  # Default fallback
+                predictions[question_num] = 'A'
         
         return predictions
     
