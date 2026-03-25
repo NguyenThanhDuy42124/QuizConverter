@@ -31,29 +31,6 @@ export default function InteractiveQuiz({ questions, predictions, onUserAnswersC
 
   return (
     <div className="interactive-quiz">
-      {/* Summary Table */}
-      {predictions && (
-        <div className="quiz-summary">
-          <h4>📊 Kết Quả Phân Tích</h4>
-          <div className="summary-table">
-            {questions.map((q, idx) => {
-              const questionNum = idx + 1;
-              const aiAnswer = predictions[`question_${questionNum}`] || '?';
-              const userAnswer = userAnswers[questionNum];
-              const status = getAnswerStatus(questionNum, userAnswer);
-              
-              return (
-                <div key={questionNum} className={`summary-cell status-${status || 'pending'}`}>
-                  <span className="cell-number">{questionNum}</span>
-                  <span className="cell-answer">{aiAnswer}</span>
-                  {userAnswer && <span className="cell-user-answer">{userAnswer}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Expandable Details Section */}
       <div className="quiz-details">
         <h4>📋 Xem Chi Tiết Trắc Nghiệm</h4>
@@ -202,6 +179,35 @@ export default function InteractiveQuiz({ questions, predictions, onUserAnswersC
                   ([qNum, ans]) => getAnswerStatus(parseInt(qNum), ans) === 'incorrect'
                 ).length}
               </span>
+            </div>
+          </div>
+
+          {/* Summary Results Table - Số câu + Đáp án */}
+          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e0e0e0' }}>
+            <h5 style={{ marginBottom: '1rem', color: '#000', fontSize: '1rem' }}>📊 Kết Quả Phân Tích ({questions.length} câu)</h5>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+              gap: '0.8rem'
+            }}>
+              {questions.map((q, idx) => {
+                const questionNum = idx + 1;
+                const aiAnswer = predictions[`question_${questionNum}`] || '?';
+                
+                return (
+                  <div key={questionNum} style={{
+                    background: '#f9f9f9',
+                    border: '2px solid #0066cc',
+                    borderRadius: '6px',
+                    padding: '0.8rem',
+                    textAlign: 'center',
+                    fontSize: '0.95rem'
+                  }}>
+                    <span style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.3rem' }}>Câu {questionNum}</span>
+                    <span style={{ display: 'block', fontSize: '1.2rem', fontWeight: 'bold', color: '#0066cc' }}>{aiAnswer}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

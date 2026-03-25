@@ -302,11 +302,18 @@ def export_marked_docx(questions: List[Dict], predictions: Dict[int, str]) -> Do
         q_num = q.get('question_number', q.get('number', 0))
         q_text = q.get('question_text', q.get('text', ''))
         
-        # Add question
-        q_heading = doc.add_heading(f'Câu {q_num}', level=3)
-        q_para = doc.add_paragraph(q_text)
-        
         predicted = predictions.get(q_num, 'A')
+        
+        # Add question with AI answer annotation
+        q_heading = doc.add_heading(f'Câu {q_num}', level=3)
+        q_para = doc.add_paragraph()
+        q_run = q_para.add_run(q_text)
+        
+        # Add AI answer annotation at the end
+        annotation_run = q_para.add_run(f"  // {predicted} (đáp án đúng)")
+        annotation_run.font.italic = True
+        annotation_run.font.color.rgb = RGBColor(0, 128, 0)
+        annotation_run.font.size = Pt(10)
         
         # Add answers with highlighting for predicted answer
         for ans in q.get('answers', []):
