@@ -28,13 +28,19 @@ class GeminiService:
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.client = None
         self.use_mock_mode = False
-        self.model = "gemini-2.5-flash"  # Use latest stable model
+        # Try models in order of preference: lightweight → balanced → powerful
+        self.models_to_try = [
+            "gemini-3.1-flash-lite-preview",  # Latest, ultra-lightweight
+            "gemini-2.5-flash-lite",          # Stable, lightweight
+            "gemini-2.5-flash",               # Stable, balanced
+            "gemini-3.1-flash-preview",       # Newer, more capable
+        ]
         
         if self.api_key and HAS_GENAI:
             try:
                 # Initialize client with new SDK
                 self.client = genai.Client(api_key=self.api_key)
-                logger.info("✅ Gemini API (google-genai) initialized successfully with gemini-2.5-flash")
+                logger.info(f"✅ Gemini API (google-genai) initialized. Trying models: {', '.join(self.models_to_try)}")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}. Falling back to mock mode.")
                 self.use_mock_mode = True
@@ -79,33 +85,43 @@ class GeminiService:
                     question_text, answers
                 )
                 
-                try:
-                    # Call API using new SDK syntax
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=formatted_prompt
+                response = None
+                last_error = None
+                
+                # Try each model until one works
+                for model_name in self.models_to_try:
+                    try:
+                        logger.debug(f"[Q{question_num}] Trying model: {model_name}")
+                        response = self.client.models.generate_content(
+                            model=model_name,
+                            contents=formatted_prompt
+                        )
+                        logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
+                        break
+                    except Exception as model_err:
+                        last_error = model_err
+                        logger.debug(f"❌ [{model_name}] Q{question_num}: {str(model_err)}")
+                        continue
+                
+                # Process response
+                if response and hasattr(response, 'text'):
+                    predicted_answer = self._parse_gemini_response(
+                        response.text, 
+                        answers_options
                     )
                     
-                    # Extract text from response
-                    if response and hasattr(response, 'text'):
-                        predicted_answer = self._parse_gemini_response(
-                            response.text, 
-                            answers_options
-                        )
-                        
-                        if predicted_answer:
-                            predictions[question_num] = predicted_answer
-                            logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
-                        else:
-                            predictions[question_num] = 'A'
-                            logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
+                    if predicted_answer:
+                        predictions[question_num] = predicted_answer
+                        logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
                     else:
                         predictions[question_num] = 'A'
-                        logger.warning(f"Q{question_num}: Empty response from API, using 'A'")
-                
-                except Exception as api_err:
-                    logger.error(f"API error for Q{question_num}: {str(api_err)}")
+                        logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
+                else:
                     predictions[question_num] = 'A'
+                    if last_error:
+                        logger.error(f"Q{question_num}: All models failed. Last error: {str(last_error)}")
+                    else:
+                        logger.warning(f"Q{question_num}: Empty response from API, using 'A'")
             
             except Exception as e:
                 question_num = q.get('question_number', q.get('number', 0))
