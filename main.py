@@ -9,8 +9,19 @@ from pathlib import Path
 # Load environment variables (optional)
 try:
     from dotenv import load_dotenv
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(env_path)
+    
+    # Load .env.local first (local overrides)
+    local_env_path = Path(__file__).parent / ".env.local"
+    if local_env_path.exists():
+        print(f"Loading environment from: {local_env_path}")
+        load_dotenv(local_env_path, override=True)
+    
+    # Then load .env (fallback)
+    default_env_path = Path(__file__).parent / ".env"
+    if default_env_path.exists():
+        print(f"Loading environment from: {default_env_path}")
+        load_dotenv(default_env_path)
+    
 except ImportError:
     pass  # dotenv not installed, use system env vars
 
