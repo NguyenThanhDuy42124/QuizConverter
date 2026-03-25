@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react';
 import '../styles/AIAnalysisPanel.css';
+import InteractiveQuiz from './InteractiveQuiz';
 
 const AIAnalysisPanel = ({ htmlContent, onAnalysisComplete, isLoading: parentLoading = false }) => {
   const [loading, setLoading] = useState(false);
@@ -102,6 +103,34 @@ const AIAnalysisPanel = ({ htmlContent, onAnalysisComplete, isLoading: parentLoa
     }
   };
 
+  const downloadUnmarkedDocx = async () => {
+    try {
+      const response = await fetch('/api/export-unmarked-docx/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          html_content: htmlContent,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Lỗi tải file');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'quiz_unmarked.docx';
+      document.body.appendChild(a);
+      a.click();
+      a.parentNode.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Lỗi khi tải file: ' + err.message);
+    }
+  };
+
   const isDisabled = loading || parentLoading || !htmlContent;
 
   return (
@@ -138,39 +167,24 @@ const AIAnalysisPanel = ({ htmlContent, onAnalysisComplete, isLoading: parentLoa
                 📄 Tải TXT
               </button>
               <button onClick={downloadMarkedDocx} className="btn-export-docx">
-                📘 Tải DOCX
+                📘 Tải Word (có đáp án)
+              </button>
+              <button onClick={() => downloadUnmarkedDocx()} className="btn-export-docx">
+                📗 Tải Word (không đáp án)
               </button>
             </div>
           </div>
 
-          <div className="questions-list">
-            {results.questions.map((q, idx) => (
-              <div key={idx} className="question-result">
-                <div className="question-header">
-                  <h5>Câu {q.question_number}</h5>
-                  <span className="confidence-badge">✓ {q.predicted_answer}</span>
-                </div>
-                <p className="question-text">{q.question_text}</p>
-                
-                <div className="answers-container">
-                  {q.answers.map((ans, ansIdx) => (
-                    <div
-                      key={ansIdx}
-                      className={`answer-item ${
-                        ans.letter === q.predicted_answer ? 'correct' : ''
-                      }`}
-                    >
-                      <span className="answer-letter">{ans.letter}</span>
-                      <span className="answer-content">{ans.content}</span>
-                      {ans.letter === q.predicted_answer && (
-                        <span className="correct-mark">✓ ĐÚNG</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <InteractiveQuiz
+            questions={results.questions}
+            predictions={results.questions.reduce((acc, q) => {
+              acc[q.question_number] = q.predicted_answer;
+              return acc;
+            }, {})}
+            onUserAnswersChange={(userAnswers) => {
+              console.log('User answers:', userAnswers);
+            }}
+          />
         </div>
       )}
     </div>

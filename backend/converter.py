@@ -237,3 +237,136 @@ def parse_html_to_text_and_doc(
     question_count = len(questions)
     
     return text_output, doc_output, question_count
+
+
+def export_marked_text(questions: List[Dict], predictions: Dict[int, str]) -> str:
+    """
+    Export quiz as text with AI-predicted answers marked with checkmarks.
+    
+    Args:
+        questions: List of question dictionaries
+        predictions: Dictionary mapping question numbers to predicted answers
+        
+    Returns:
+        Plain text with marked answers
+    """
+    converter = QuizConverter()
+    output = []
+    
+    for q in questions:
+        q_num = q.get('question_number', q.get('number', 0))
+        q_text = q.get('question_text', q.get('text', ''))
+        
+        output.append(f"\n{'='*60}")
+        output.append(f"Câu {q_num}: {q_text}")
+        output.append('='*60)
+        
+        predicted = predictions.get(q_num, 'A')
+        
+        for ans in q.get('answers', []):
+            letter = ans.get('letter', '')
+            content = ans.get('content', '')
+            
+            # Mark with checkmark if this is the predicted answer
+            mark = "✓ " if letter == predicted else "  "
+            output.append(f"{mark}{letter}. {content}")
+        
+    output.append(f"\n{'='*60}")
+    output.append("Kết quả được AI phân tích")
+    output.append('='*60)
+    
+    return '\n'.join(output)
+
+
+def export_marked_docx(questions: List[Dict], predictions: Dict[int, str]) -> Document:
+    """
+    Export quiz as Word document with AI-predicted answers highlighted in green.
+    
+    Args:
+        questions: List of question dictionaries
+        predictions: Dictionary mapping question numbers to predicted answers
+        
+    Returns:
+        Word document with marked answers
+    """
+    from docx.shared import RGBColor
+    
+    doc = Document()
+    
+    # Add title
+    title = doc.add_heading('Bài Trắc Nghiệm - Kết Quả Phân Tích AI', level=1)
+    title_format = title.paragraph_format
+    title_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    for q in questions:
+        q_num = q.get('question_number', q.get('number', 0))
+        q_text = q.get('question_text', q.get('text', ''))
+        
+        # Add question
+        q_heading = doc.add_heading(f'Câu {q_num}', level=3)
+        q_para = doc.add_paragraph(q_text)
+        
+        predicted = predictions.get(q_num, 'A')
+        
+        # Add answers with highlighting for predicted answer
+        for ans in q.get('answers', []):
+            letter = ans.get('letter', '')
+            content = ans.get('content', '')
+            
+            # Create paragraph for answer
+            para = doc.add_paragraph(style='List Bullet')
+            
+            # Add letter and content
+            run = para.add_run(f"{letter}. {content}")
+            
+            is_predicted = letter == predicted
+            if is_predicted:
+                # Highlight predicted answer in green
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(0, 128, 0)  # Green
+                # Add checkmark
+                checkmark = para.add_run(" ✓")
+                checkmark.font.bold = True
+                checkmark.font.color.rgb = RGBColor(0, 128, 0)
+        
+        # Add spacing
+        doc.add_paragraph()
+    
+    return doc
+
+
+def export_unmarked_docx(questions: List[Dict]) -> Document:
+    """
+    Export quiz as Word document without any answers shown.
+    
+    Args:
+        questions: List of question dictionaries
+        
+    Returns:
+        Word document without answers
+    """
+    doc = Document()
+    
+    # Add title
+    title = doc.add_heading('Bài Trắc Nghiệm', level=1)
+    title_format = title.paragraph_format
+    title_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    for q in questions:
+        q_num = q.get('question_number', q.get('number', 0))
+        q_text = q.get('question_text', q.get('text', ''))
+        
+        # Add question only, no answers
+        q_heading = doc.add_heading(f'Câu {q_num}', level=3)
+        q_para = doc.add_paragraph(q_text)
+        
+        # Add blank space for written answer
+        blank = doc.add_paragraph()
+        blank.paragraph_format.left_indent = Inches(0.5)
+        blank.text = "_" * 40
+        
+        # Add spacing
+        doc.add_paragraph()
+    
+    return doc
+

@@ -25,8 +25,9 @@ import json
 from database import Base, engine, AsyncSessionLocal, init_db, dispose_engine
 from models import ConversionHistory
 from schemas import ConvertHTMLRequest, ConvertHTMLResponse, ConversionHistorySchema
-from converter import parse_html_to_text_and_doc
+from converter import parse_html_to_text_and_doc, QuizParser, export_marked_text, export_marked_docx, export_unmarked_docx
 from combinatorics import shuffle_quiz
+from gemini_service import analyze_quiz_with_ai
 
 
 # Create FastAPI app
@@ -238,6 +239,184 @@ async def get_history(
     
     except Exception as e:
         print(f"Error in get_history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze-with-ai/")
+async def analyze_with_ai(request: ConvertHTMLRequest):
+    """
+    Analyze quiz with Google Gemini AI to predict correct answers.
+    
+    Args:
+        request: ConvertHTMLRequest with html_content
+        
+    Returns:
+        Dictionary with predictions and questions
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Parse questions from HTML
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="No questions found in HTML")
+        
+        # Analyze with AI
+        predictions = analyze_quiz_with_ai(questions)
+        
+        # Prepare response
+        result = {
+            "total_questions": len(questions),
+            "questions": []
+        }
+        
+        for q in questions:
+            q_num = q.get('question_number', q.get('number', 0))
+            predicted = predictions.get(q_num, 'A')
+            
+            result["questions"].append({
+                "question_number": q_num,
+                "question_text": q.get('question_text', q.get('text', '')),
+                "answers": q.get('answers', []),
+                "predicted_answer": predicted
+            })
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in analyze_with_ai: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export-marked-text/")
+async def export_marked_text_endpoint(request: ConvertHTMLRequest):
+    """
+    Export quiz as text with AI-predicted answers marked.
+    
+    Args:
+        request: ConvertHTMLRequest with html_content
+        
+    Returns:
+        Text file with marked answers
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Parse questions
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        # Get AI predictions
+        predictions = analyze_quiz_with_ai(questions)
+        
+        # Export as marked text
+        text_content = export_marked_text(questions, predictions)
+        
+        # Return as text file
+        from fastapi.responses import Response
+        return Response(
+            content=text_content,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=quiz_marked.txt"}
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in export_marked_text: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export-marked-docx/")
+async def export_marked_docx_endpoint(request: ConvertHTMLRequest):
+    """
+    Export quiz as Word document with AI-predicted answers highlighted.
+    
+    Args:
+        request: ConvertHTMLRequest with html_content
+        
+    Returns:
+        Word document with marked answers
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Parse questions
+        parser = QuizParser()
+        questions = parser.parse_questions(request.html_content)
+        
+        # Get AI predictions
+        predictions = analyze_quiz_with_ai(questions)
+        
+        # Export as marked docx
+        doc = export_marked_docx(questions, predictions)
+        
+        # Save temporarily and return
+        import io
+        from docx import Document
+        
+        doc_io = io.BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+        
+        from fastapi.responses import Response
+        return Response(
+            content=doc_io.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": "attachment; filename=quiz_marked.docx"}
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in export_marked_docx: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export-unmarked-docx/")
+async def export_unmarked_docx_endpoint(request: ConvertHTMLRequest):
+    """
+    Export quiz as Word document without answers shown.
+    
+    Args:
+        request: ConvertHTMLRequest with html_content
+        
+    Returns:
+        Word document without answers
+    """
+    try:
+        if not request.html_content.strip():
+            raise HTTPException(status_code=400, detail="HTML content is empty")
+        
+        # Parse and export without predictions
+        text_output, doc_output, _ = parse_html_to_text_and_doc(request.html_content)
+        
+        # Save temporarily and return
+        import io
+        from docx import Document
+        
+        doc_io = io.BytesIO()
+        doc_output.save(doc_io)
+        doc_io.seek(0)
+        
+        from fastapi.responses import Response
+        return Response(
+            content=doc_io.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": "attachment; filename=quiz_unmarked.docx"}
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in export_unmarked_docx: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
