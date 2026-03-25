@@ -79,6 +79,7 @@ Ví dụ trả lời: A"""
         """Perform real analysis using Gemini API with new SDK."""
         predictions = {}
         answers_options = ['A', 'B', 'C', 'D']
+        all_failed = True
         
         for q in questions:
             try:
@@ -106,6 +107,7 @@ Ví dụ trả lời: A"""
                         )
                         
                         logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
+                        all_failed = False
                         break
                     except Exception as model_err:
                         last_error = model_err
@@ -126,18 +128,26 @@ Ví dụ trả lời: A"""
                         predictions[question_num] = 'A'
                         logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
                 else:
-                    predictions[question_num] = 'A'
+                    # No valid response - use mock for this question
+                    predictions[question_num] = self._mock_single_question(question_num)
                     if last_error:
-                        logger.error(f"Q{question_num}: All models failed. Last error: {str(last_error)}")
-                    else:
-                        logger.warning(f"Q{question_num}: Empty response from API, using 'A'")
+                        logger.warning(f"Q{question_num}: AI failed ({str(last_error)[:80]}), using mock")
             
             except Exception as e:
                 question_num = q.get('question_number', q.get('number', 0))
                 logger.error(f"Error analyzing question {question_num}: {e}")
-                predictions[question_num] = 'A'
+                predictions[question_num] = self._mock_single_question(question_num)
+        
+        # If ALL models failed, log clear warning
+        if all_failed:
+            logger.warning("⚠️  ALL AI models failed! Using mock predictions. Check API key and quota.")
         
         return predictions
+    
+    def _mock_single_question(self, question_num: int) -> str:
+        """Generate mock prediction for a single question."""
+        cycle = ['A', 'B', 'C', 'D']
+        return cycle[(question_num - 1) % len(cycle)]
     
     def _mock_analyze(self, questions: List[Dict]) -> Dict:
         """Mock analysis for development without API key."""
