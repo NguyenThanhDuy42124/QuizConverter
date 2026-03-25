@@ -10,11 +10,13 @@
   --primary-color: #0066cc;
   --success-color: #28a745;
   --error-color: #dc3545;
-  --warning-color: #ffc107;
-  --bg-color: #f8f9fa;
-  --text-color: #333;
-  --border-color: #dee2e6;
+  --warning-color: #ff9800;
+  --bg-color: #ffffff;
+  --text-color: #000000;
+  --border-color: #e0e0e0;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --card-bg: #ffffff;
+  --panel-bg: #f5f5f5;
 }
 
 html,
@@ -38,16 +40,17 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #ffffff;
 }
 
 /* Header */
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+  color: #000000;
   padding: 2rem 1rem;
   box-shadow: var(--shadow);
   text-align: center;
+  border-bottom: 2px solid var(--primary-color);
 }
 
 .header-content {
@@ -73,21 +76,24 @@ body {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
+  color: #000000;
 }
 
 .connection-status .status {
   padding: 0.4rem 0.8rem;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.2);
+  background: #e0e0e0;
+  color: #000000;
 }
 
 .status.connected {
   color: #28a745;
-  background: white;
+  background: #d4edda;
 }
 
 .status.disconnected {
-  color: #ffc107;
+  color: #ff9800;
+  background: #ffe0b2;
 }
 
 /* Main Content */
