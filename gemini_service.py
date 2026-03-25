@@ -25,12 +25,11 @@ class GeminiService:
         # API endpoint - use v1beta (CRITICAL!)
         self.api_endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
         
-        # Try models in order of preference
+        # Try models in order of preference (v1beta compatible only)
         self.models_to_try = [
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-2.0-flash",
-            "gemini-pro",
+            "gemini-1.5-flash",      # Latest, fast, reliable
+            "gemini-1.5-pro",        # More powerful
+            "gemini-2.0-flash",      # Newest model
         ]
         
         # System instruction to force single letter response
@@ -112,6 +111,8 @@ Ví dụ: A"""
                         
                         # Make HTTP POST request
                         headers = {"Content-Type": "application/json"}
+                        logger.debug(f"[Q{question_num}] POST {url.replace(self.api_key, 'API_KEY_HIDDEN')}")
+                        
                         http_response = requests.post(
                             url,
                             headers=headers,
@@ -126,7 +127,8 @@ Ví dụ: A"""
                             all_failed = False
                             break
                         else:
-                            last_error = f"HTTP {http_response.status_code}: {http_response.text[:100]}"
+                            error_msg = http_response.text[:200] if http_response.text else "No error details"
+                            last_error = f"HTTP {http_response.status_code}: {error_msg}"
                             logger.debug(f"❌ [{model_name}] Q{question_num}: {last_error}")
                             continue
                     
@@ -163,7 +165,11 @@ Ví dụ: A"""
         
         # If ALL models failed
         if all_failed and not self.use_mock_mode:
-            logger.warning("⚠️  ALL AI models failed! Using mock predictions. Check API key, endpoint, and quota.")
+            logger.warning("⚠️  ALL AI models failed!")
+            logger.warning(f"  - Models tried: {', '.join(self.models_to_try)}")
+            logger.warning(f"  - API Key set: {bool(self.api_key)}")
+            logger.warning(f"  - Endpoint: {self.api_endpoint}")
+            logger.warning("  Check: API key validity, billing quota, network access, rate limits")
             self.use_mock_mode = True
         
         return predictions
