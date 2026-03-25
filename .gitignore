@@ -128,7 +128,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# .env  # COMMENTED OUT: .env is needed for production API keys
 .venv
 env/
 venv/
