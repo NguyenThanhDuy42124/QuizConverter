@@ -28,11 +28,29 @@ class GeminiService:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = None
         self.use_mock_mode = False
-        # Try models in order: gemini-pro is the most reliable for v1beta API
+        # Try ALL possible Gemini models - first one that works will be used
+        # Models are ordered by recommendation (fast → powerful)
         self.models_to_try = [
-            "gemini-pro",                # Most reliable for v1beta API
-            "gemini-1.5-pro",            # If you have access to newer versions
+            # Latest generation (2.0)
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-pro",
+            "gemini-2.0-pro-exp-02-05",
+            
+            # Stable generation (1.5)
+            "gemini-1.5-pro",
             "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            
+            # Older generation (pro)
+            "gemini-pro",
+            "gemini-pro-vision",
+            "gemini-pro-1.5",
+            
+            # Legacy names
+            "models/gemini-pro",
+            "models/gemini-1.5-pro",
+            "models/gemini-1.5-flash",
         ]
         
         # System instruction để ép AI chỉ trả về 1 chữ cái (A, B, C, D)
