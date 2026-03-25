@@ -1,78 +1,50 @@
 """
-Google Gemini AI Service for automatic quiz answer marking.
+Google Gemini AI Service using HTTP API (not SDK).
+Calls Gemini API directly via HTTP POST request using requests library.
 Supports both real API mode and mock mode for development.
-Uses the new google-genai SDK (2025+).
+Uses the correct v1beta endpoint per Gemini's guidance.
 """
 
 import os
 import json
 import logging
+import requests
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Try to import Google AI SDK (new)
-try:
-    from google import genai
-    HAS_GENAI = True
-except ImportError:
-    HAS_GENAI = False
-    logger.warning("google-genai not installed. Running in mock mode.")
-
 
 class GeminiService:
-    """Service for AI-powered quiz answer analysis using google-genai SDK."""
+    """Service for AI-powered quiz answer analysis using HTTP API."""
     
     def __init__(self, api_key: Optional[str] = None):
         """Initialize Gemini service with API key from environment or parameter."""
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.client = None
         self.use_mock_mode = False
-        # Try ALL possible Gemini models - first one that works will be used
-        # Models are ordered by recommendation (fast → powerful)
+        
+        # API endpoint - use v1beta (CRITICAL!)
+        self.api_endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
+        
+        # Try models in order of preference
         self.models_to_try = [
-            # Latest generation (2.0)
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-2.0-pro",
-            "gemini-2.0-pro-exp-02-05",
-            
-            # Stable generation (1.5)
-            "gemini-1.5-pro",
             "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            
-            # Older generation (pro)
+            "gemini-1.5-pro",
+            "gemini-2.0-flash",
             "gemini-pro",
-            "gemini-pro-vision",
-            "gemini-pro-1.5",
-            
-            # Legacy names
-            "models/gemini-pro",
-            "models/gemini-1.5-pro",
-            "models/gemini-1.5-flash",
         ]
         
-        # System instruction để ép AI chỉ trả về 1 chữ cái (A, B, C, D)
+        # System instruction to force single letter response
         self.system_instruction = """Bạn là một chuyên gia giải trắc nghiệm.
-Nhiệm vụ của bạn là đọc câu hỏi và đưa ra đáp án đúng.
 CHỈ trả về một chữ cái duy nhất là A, B, C, hoặc D.
-TUYỆT ĐỐI không giải thích, không thêm dấu chấm câu hay bất kỳ từ ngữ nào khác.
-Ví dụ trả lời: A"""
+TUYỆT ĐỐI không giải thích hay thêm từ ngữ khác.
+Ví dụ: A"""
         
-        if self.api_key and HAS_GENAI:
-            try:
-                # Initialize client with new SDK
-                self.client = genai.Client(api_key=self.api_key)
-                logger.info(f"✅ Gemini API (google-genai) initialized with system_instruction. Trying models: {', '.join(self.models_to_try)}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Gemini client: {e}. Falling back to mock mode.")
-                self.use_mock_mode = True
-        else:
-            if not self.api_key:
-                logger.warning("GEMINI_API_KEY not set. Running in mock mode.")
-                logger.info("To enable real API: create .env.local file with GEMINI_API_KEY")
+        if not self.api_key:
+            logger.warning("GEMINI_API_KEY not set. Running in mock mode.")
+            logger.info("To enable real API: create .env.local file with GEMINI_API_KEY")
             self.use_mock_mode = True
+        else:
+            logger.info(f"✅ Gemini API (HTTP) initialized. Trying models: {', '.join(self.models_to_try)}")
     
     async def analyze_quiz(self, questions: List[Dict]) -> Dict:
         """
@@ -84,7 +56,7 @@ Ví dụ trả lời: A"""
         Returns:
             Dictionary with predictions for each question
         """
-        if self.use_mock_mode or not self.client:
+        if self.use_mock_mode:
             return self._mock_analyze(questions)
         
         try:
@@ -94,7 +66,7 @@ Ví dụ trả lời: A"""
             return self._mock_analyze(questions)
     
     def _real_analyze(self, questions: List[Dict]) -> Dict:
-        """Perform real analysis using Gemini API with new SDK."""
+        """Perform real analysis using Gemini HTTP API."""
         predictions = {}
         answers_options = ['A', 'B', 'C', 'D']
         all_failed = True
@@ -105,10 +77,8 @@ Ví dụ trả lời: A"""
                 question_text = q.get('question_text', q.get('text', ''))
                 answers = q.get('answers', [])
                 
-                # Format the question for Gemini
-                formatted_prompt = self._format_question_for_gemini(
-                    question_text, answers
-                )
+                # Format the question
+                formatted_prompt = self._format_question(question_text, answers)
                 
                 response = None
                 last_error = None
@@ -118,47 +88,83 @@ Ví dụ trả lời: A"""
                     try:
                         logger.debug(f"[Q{question_num}] Trying model: {model_name}")
                         
-                        # Call API directly with client
-                        response = self.client.models.generate_content(
-                            model=model_name,
-                            contents=formatted_prompt
+                        # Build URL - IMPORTANT: use v1beta!
+                        url = f"{self.api_endpoint}/{model_name}:generateContent?key={self.api_key}"
+                        
+                        # Build request payload (Google's required format)
+                        payload = {
+                            "contents": [
+                                {
+                                    "parts": [
+                                        {"text": formatted_prompt}
+                                    ]
+                                }
+                            ],
+                            "systemInstruction": {
+                                "parts": [
+                                    {"text": self.system_instruction}
+                                ]
+                            },
+                            "generationConfig": {
+                                "temperature": 0.1  # Low temperature for accuracy
+                            }
+                        }
+                        
+                        # Make HTTP POST request
+                        headers = {"Content-Type": "application/json"}
+                        http_response = requests.post(
+                            url,
+                            headers=headers,
+                            json=payload,
+                            timeout=10
                         )
                         
-                        logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
-                        all_failed = False
-                        break
+                        if http_response.status_code == 200:
+                            response_data = http_response.json()
+                            response = response_data
+                            logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
+                            all_failed = False
+                            break
+                        else:
+                            last_error = f"HTTP {http_response.status_code}: {http_response.text[:100]}"
+                            logger.debug(f"❌ [{model_name}] Q{question_num}: {last_error}")
+                            continue
+                    
                     except Exception as model_err:
-                        last_error = model_err
-                        logger.debug(f"❌ [{model_name}] Q{question_num}: {str(model_err)}")
+                        last_error = str(model_err)
+                        logger.debug(f"❌ [{model_name}] Q{question_num}: {last_error}")
                         continue
                 
                 # Process response
-                if response and hasattr(response, 'text'):
-                    predicted_answer = self._parse_gemini_response(
-                        response.text, 
-                        answers_options
-                    )
-                    
-                    if predicted_answer:
-                        predictions[question_num] = predicted_answer
-                        logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
-                    else:
+                if response:
+                    try:
+                        # Extract text from Google's nested response structure
+                        answer_text = response["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        predicted_answer = self._parse_gemini_response(answer_text, answers_options)
+                        
+                        if predicted_answer:
+                            predictions[question_num] = predicted_answer
+                            logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                        else:
+                            predictions[question_num] = 'A'
+                            logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
+                    except (KeyError, IndexError, TypeError) as e:
+                        logger.warning(f"Q{question_num}: Failed to parse response: {e}")
                         predictions[question_num] = 'A'
-                        logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
                 else:
-                    # No valid response - use mock for this question
                     predictions[question_num] = self._mock_single_question(question_num)
                     if last_error:
-                        logger.warning(f"Q{question_num}: AI failed ({str(last_error)[:80]}), using mock")
+                        logger.warning(f"Q{question_num}: API failed ({last_error}), using mock")
             
             except Exception as e:
                 question_num = q.get('question_number', q.get('number', 0))
                 logger.error(f"Error analyzing question {question_num}: {e}")
                 predictions[question_num] = self._mock_single_question(question_num)
         
-        # If ALL models failed, log clear warning
-        if all_failed:
-            logger.warning("⚠️  ALL AI models failed! Using mock predictions. Check API key and quota.")
+        # If ALL models failed
+        if all_failed and not self.use_mock_mode:
+            logger.warning("⚠️  ALL AI models failed! Using mock predictions. Check API key, endpoint, and quota.")
+            self.use_mock_mode = True
         
         return predictions
     
@@ -170,31 +176,22 @@ Ví dụ trả lời: A"""
     def _mock_analyze(self, questions: List[Dict]) -> Dict:
         """Mock analysis for development without API key."""
         predictions = {}
-        cycle = ['A', 'B', 'C', 'D']
         
         for i, q in enumerate(questions):
             question_num = q.get('question_number', q.get('number', i + 1))
-            # Cycle through answers based on question number for deterministic testing
-            predicted_answer = cycle[(i) % len(cycle)]
-            predictions[question_num] = predicted_answer
-            logger.debug(f"[MOCK] Q{question_num}: Predicted answer = {predicted_answer}")
+            predictions[question_num] = self._mock_single_question(question_num)
+            logger.debug(f"[MOCK] Q{question_num}: Predicted answer = {predictions[question_num]}")
         
         return predictions
     
-    def _format_question_for_gemini(self, question_text: str, answers: List[Dict]) -> str:
-        """Format question for Gemini API with system instruction embedded in prompt."""
-        prompt = """Bạn là một chuyên gia giải trắc nghiệm.
-CHỈ trả về một chữ cái duy nhất là A, B, C, hoặc D.
-TUYỆT ĐỐI không giải thích hay thêm từ ngữ khác.
-
-"""
-        prompt += f"Câu hỏi: {question_text}\n\nCác đáp án:\n"
+    def _format_question(self, question_text: str, answers: List[Dict]) -> str:
+        """Format question for Gemini API."""
+        prompt = f"Câu hỏi: {question_text}\n\nCác đáp án:\n"
         for ans in answers:
             letter = ans.get('letter', '')
             content = ans.get('content', '')
             prompt += f"{letter}. {content}\n"
         
-        prompt += "\nTrả lời (chỉ một chữ cái): "
         return prompt
     
     def _parse_gemini_response(self, response_text: str, valid_options: List[str]) -> Optional[str]:
