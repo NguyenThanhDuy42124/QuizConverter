@@ -100,14 +100,9 @@ Ví dụ trả lời: A"""
                     try:
                         logger.debug(f"[Q{question_num}] Trying model: {model_name}")
                         
-                        # Create GenerativeModel with system_instruction
-                        model = genai.GenerativeModel(
-                            model_name=model_name,
-                            system_instruction=self.system_instruction
-                        )
-                        
-                        # Call generate_content with the model instance
-                        response = model.generate_content(
+                        # Call API directly with client
+                        response = self.client.models.generate_content(
+                            model=model_name,
                             contents=formatted_prompt
                         )
                         
@@ -160,16 +155,19 @@ Ví dụ trả lời: A"""
         return predictions
     
     def _format_question_for_gemini(self, question_text: str, answers: List[Dict]) -> str:
-        """Format question for Gemini API."""
-        prompt = f"""Câu hỏi: {question_text}
+        """Format question for Gemini API with system instruction embedded in prompt."""
+        prompt = """Bạn là một chuyên gia giải trắc nghiệm.
+CHỈ trả về một chữ cái duy nhất là A, B, C, hoặc D.
+TUYỆT ĐỐI không giải thích hay thêm từ ngữ khác.
 
-Các đáp án:
 """
+        prompt += f"Câu hỏi: {question_text}\n\nCác đáp án:\n"
         for ans in answers:
             letter = ans.get('letter', '')
             content = ans.get('content', '')
             prompt += f"{letter}. {content}\n"
         
+        prompt += "\nTrả lời (chỉ một chữ cái): "
         return prompt
     
     def _parse_gemini_response(self, response_text: str, valid_options: List[str]) -> Optional[str]:
