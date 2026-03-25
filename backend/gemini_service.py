@@ -1,7 +1,7 @@
 """
 Google Gemini AI Service for automatic quiz answer marking.
 Supports both real API mode and mock mode for development.
-Uses the new google-genai SDK.
+Uses the new google-genai SDK (2025+).
 """
 
 import os
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import Google AI SDK (new)
 try:
-    import google.genai as genai
+    from google import genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
@@ -21,22 +21,22 @@ except ImportError:
 
 
 class GeminiService:
-    """Service for AI-powered quiz answer analysis."""
+    """Service for AI-powered quiz answer analysis using google-genai SDK."""
     
     def __init__(self):
         """Initialize Gemini service with API key from environment."""
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.client = None
         self.use_mock_mode = False
+        self.model = "gemini-2.5-flash"  # Use latest stable model
         
         if self.api_key and HAS_GENAI:
             try:
-                # Configure with new google-genai SDK
-                genai.configure(api_key=self.api_key)
-                self.client = genai
-                logger.info("✅ Gemini API (google-genai) configured successfully")
+                # Initialize client with new SDK
+                self.client = genai.Client(api_key=self.api_key)
+                logger.info("✅ Gemini API (google-genai) initialized successfully with gemini-2.5-flash")
             except Exception as e:
-                logger.warning(f"Failed to configure Gemini API: {e}. Falling back to mock mode.")
+                logger.warning(f"Failed to initialize Gemini client: {e}. Falling back to mock mode.")
                 self.use_mock_mode = True
         else:
             if not self.api_key:
@@ -64,12 +64,9 @@ class GeminiService:
             return self._mock_analyze(questions)
     
     def _real_analyze(self, questions: List[Dict]) -> Dict:
-        """Perform real analysis using Gemini API."""
+        """Perform real analysis using Gemini API with new SDK."""
         predictions = {}
         answers_options = ['A', 'B', 'C', 'D']
-        
-        # Try multiple models in order of preference
-        models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
         
         for q in questions:
             try:
@@ -78,39 +75,40 @@ class GeminiService:
                 answers = q.get('answers', [])
                 
                 # Format the question for Gemini
-                formatted_question = self._format_question_for_gemini(
+                formatted_prompt = self._format_question_for_gemini(
                     question_text, answers
                 )
                 
-                # Try each model until one works
-                response = None
-                for model_name in models_to_try:
-                    try:
-                        response = self.client.GenerativeModel(model_name).generate_content(
-                            formatted_question
-                        )
-                        logger.debug(f"[{model_name}] Q{question_num}: Success")
-                        break
-                    except Exception as model_err:
-                        logger.debug(f"[{model_name}] Q{question_num}: {str(model_err)}")
-                        continue
-                
-                if response:
-                    # Parse response
-                    predicted_answer = self._parse_gemini_response(response.text, answers_options)
+                try:
+                    # Call API using new SDK syntax
+                    response = self.client.models.generate_content(
+                        model=self.model,
+                        contents=formatted_prompt
+                    )
                     
-                    if predicted_answer:
-                        predictions[question_num] = predicted_answer
-                        logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                    # Extract text from response
+                    if response and hasattr(response, 'text'):
+                        predicted_answer = self._parse_gemini_response(
+                            response.text, 
+                            answers_options
+                        )
+                        
+                        if predicted_answer:
+                            predictions[question_num] = predicted_answer
+                            logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                        else:
+                            predictions[question_num] = 'A'
+                            logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
                     else:
                         predictions[question_num] = 'A'
-                        logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
-                else:
-                    # All models failed
+                        logger.warning(f"Q{question_num}: Empty response from API, using 'A'")
+                
+                except Exception as api_err:
+                    logger.error(f"API error for Q{question_num}: {str(api_err)}")
                     predictions[question_num] = 'A'
-                    logger.warning(f"Q{question_num}: All models failed, using 'A'")
             
             except Exception as e:
+                question_num = q.get('question_number', q.get('number', 0))
                 logger.error(f"Error analyzing question {question_num}: {e}")
                 predictions[question_num] = 'A'
         
@@ -132,7 +130,7 @@ class GeminiService:
     
     def _format_question_for_gemini(self, question_text: str, answers: List[Dict]) -> str:
         """Format question for Gemini API."""
-        prompt = f"""Analyze this quiz question and determine the most likely correct answer.
+        prompt = f"""Analyze this multiple choice question and determine the most likely correct answer.
 
 QUESTION: {question_text}
 
