@@ -99,12 +99,18 @@ Ví dụ trả lời: A"""
                 for model_name in self.models_to_try:
                     try:
                         logger.debug(f"[Q{question_num}] Trying model: {model_name}")
-                        # Use system_instruction to force single letter response
-                        response = self.client.models.generate_content(
-                            model=model_name,
-                            contents=formatted_prompt,
+                        
+                        # Create GenerativeModel with system_instruction
+                        model = genai.GenerativeModel(
+                            model_name=model_name,
                             system_instruction=self.system_instruction
                         )
+                        
+                        # Call generate_content with the model instance
+                        response = model.generate_content(
+                            contents=formatted_prompt
+                        )
+                        
                         logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
                         break
                     except Exception as model_err:
