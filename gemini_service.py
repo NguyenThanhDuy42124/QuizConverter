@@ -1,116 +1,194 @@
 """
-Gemini AI Service for Quiz Analysis
-Handles communication with Google Generative AI API
-Supports mock mode for development without API key
+Google Gemini AI Service for automatic quiz answer marking.
+Supports both real API mode and mock mode for development.
+Uses the new google-genai SDK (2025+).
 """
 
-import json
-import re
 import os
-from typing import List, Dict, Optional
+import json
+import logging
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# Try to import Google AI SDK (new)
+try:
+    from google import genai
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
+    logger.warning("google-genai not installed. Running in mock mode.")
 
 
 class GeminiService:
-    """Service to analyze quiz questions with Google Gemini AI"""
+    """Service for AI-powered quiz answer analysis using google-genai SDK."""
     
-    def __init__(self, api_key: str = None):
-        """Initialize Gemini service with API key"""
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize Gemini service with API key from environment or parameter."""
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.use_mock = not self.api_key  # Use mock if no API key
+        self.client = None
+        self.use_mock_mode = False
+        # Try models in order of preference: lightweight → balanced → powerful
+        self.models_to_try = [
+            "gemini-3.1-flash-lite-preview",  # Latest, ultra-lightweight
+            "gemini-2.5-flash-lite",          # Stable, lightweight
+            "gemini-2.5-flash",               # Stable, balanced
+            "gemini-3.1-flash-preview",       # Newer, more capable
+        ]
         
-        if not self.use_mock:
+        if self.api_key and HAS_GENAI:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                # Initialize client with new SDK
+                self.client = genai.Client(api_key=self.api_key)
+                logger.info(f"✅ Gemini API (google-genai) initialized. Trying models: {', '.join(self.models_to_try)}")
             except Exception as e:
-                print(f"Warning: Could not initialize Gemini: {e}. Using mock mode.")
-                self.use_mock = True
-    
-    def format_questions_for_analysis(self, questions: List[Dict]) -> str:
-        """Format questions into readable text for AI analysis"""
-        quiz_text = ""
-        
-        for q in questions:
-            quiz_text += f"\nCâu {q['question_number']}: {q['question_text']}\n"
-            for ans in q['answers']:
-                quiz_text += f"{ans['letter']}. {ans['content']}\n"
-        
-        return quiz_text
-    
-    def build_prompt(self, quiz_text: str) -> str:
-        """Build precise prompt for Gemini AI"""
-        prompt = f"""Bạn là một chuyên gia giải các bài trắc nghiệm tiếng Việt. 
-Hãy phân tích các câu hỏi sau và chọn đáp án đúng nhất dựa trên kiến thức của bạn.
-
-{quiz_text}
-
-BẮTBUỘC: Trả về kết quả dưới dạng JSON THUẦN (chỉ JSON, không có text phía trước/sau):
-{{
-    "question_1": "A",
-    "question_2": "B",
-    "question_3": "C"
-}}
-
-Không giải thích gì thêm, chỉ trả về JSON."""
-        return prompt
-    
-    def _generate_mock_predictions(self, questions: List[Dict]) -> Dict:
-        """Generate mock predictions for testing without API key"""
-        predictions = {}
-        options = ['A', 'B', 'C', 'D']
-        
-        for q in questions:
-            question_num = q['question_number']
-            num_answers = len(q['answers'])
-            # Simple mock: cycle through options based on question number
-            answer_idx = (question_num - 1) % num_answers
-            predictions[f"question_{question_num}"] = options[answer_idx]
-        
-        return predictions
+                logger.warning(f"Failed to initialize Gemini client: {e}. Falling back to mock mode.")
+                self.use_mock_mode = True
+        else:
+            if not self.api_key:
+                logger.warning("GEMINI_API_KEY not set. Running in mock mode.")
+                logger.info("To enable real API: create .env.local file with GEMINI_API_KEY")
+            self.use_mock_mode = True
     
     async def analyze_quiz(self, questions: List[Dict]) -> Dict:
         """
-        Analyze quiz questions and predict correct answers
+        Analyze quiz questions and predict correct answers using AI.
         
         Args:
-            questions: List of question dicts with 'question_number', 'question_text', 'answers'
+            questions: List of question dictionaries from parser
             
         Returns:
-            Dict with predictions: {"question_1": "A", "question_2": "B", ...}
+            Dictionary with predictions for each question
         """
-        try:
-            # Use mock if no API key
-            if self.use_mock:
-                print("⚠️  Mock mode: No Gemini API key configured. Using mock predictions.")
-                predictions = self._generate_mock_predictions(questions)
-                return predictions
-            
-            # Format questions
-            quiz_text = self.format_questions_for_analysis(questions)
-            prompt = self.build_prompt(quiz_text)
-            
-            # Call Gemini API
-            response = self.model.generate_content(prompt)
-            
-            # Extract JSON from response
-            response_text = response.text
-            json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
-            
-            if json_match:
-                predictions = json.loads(json_match.group())
-                return predictions
-            else:
-                raise ValueError("No valid JSON found in Gemini response")
+        if self.use_mock_mode or not self.client:
+            return self._mock_analyze(questions)
         
+        try:
+            return self._real_analyze(questions)
         except Exception as e:
-            print(f"Error analyzing quiz with Gemini: {str(e)}")
-            # Fallback to mock on error
-            predictions = self._generate_mock_predictions(questions)
-            print(f"⚠️  Falling back to mock predictions")
-            return predictions
+            logger.error(f"Error in real analysis: {e}. Falling back to mock mode.")
+            return self._mock_analyze(questions)
+    
+    def _real_analyze(self, questions: List[Dict]) -> Dict:
+        """Perform real analysis using Gemini API with new SDK."""
+        predictions = {}
+        answers_options = ['A', 'B', 'C', 'D']
+        
+        for q in questions:
+            try:
+                question_num = q.get('question_number', q.get('number', 0))
+                question_text = q.get('question_text', q.get('text', ''))
+                answers = q.get('answers', [])
+                
+                # Format the question for Gemini
+                formatted_prompt = self._format_question_for_gemini(
+                    question_text, answers
+                )
+                
+                response = None
+                last_error = None
+                
+                # Try each model until one works
+                for model_name in self.models_to_try:
+                    try:
+                        logger.debug(f"[Q{question_num}] Trying model: {model_name}")
+                        response = self.client.models.generate_content(
+                            model=model_name,
+                            contents=formatted_prompt
+                        )
+                        logger.info(f"✅ [Q{question_num}] Success with model: {model_name}")
+                        break
+                    except Exception as model_err:
+                        last_error = model_err
+                        logger.debug(f"❌ [{model_name}] Q{question_num}: {str(model_err)}")
+                        continue
+                
+                # Process response
+                if response and hasattr(response, 'text'):
+                    predicted_answer = self._parse_gemini_response(
+                        response.text, 
+                        answers_options
+                    )
+                    
+                    if predicted_answer:
+                        predictions[question_num] = predicted_answer
+                        logger.debug(f"Q{question_num}: Predicted answer = {predicted_answer}")
+                    else:
+                        predictions[question_num] = 'A'
+                        logger.debug(f"Q{question_num}: No valid prediction, using 'A'")
+                else:
+                    predictions[question_num] = 'A'
+                    if last_error:
+                        logger.error(f"Q{question_num}: All models failed. Last error: {str(last_error)}")
+                    else:
+                        logger.warning(f"Q{question_num}: Empty response from API, using 'A'")
+            
+            except Exception as e:
+                question_num = q.get('question_number', q.get('number', 0))
+                logger.error(f"Error analyzing question {question_num}: {e}")
+                predictions[question_num] = 'A'
+        
+        return predictions
+    
+    def _mock_analyze(self, questions: List[Dict]) -> Dict:
+        """Mock analysis for development without API key."""
+        predictions = {}
+        cycle = ['A', 'B', 'C', 'D']
+        
+        for i, q in enumerate(questions):
+            question_num = q.get('question_number', q.get('number', i + 1))
+            # Cycle through answers based on question number for deterministic testing
+            predicted_answer = cycle[(i) % len(cycle)]
+            predictions[question_num] = predicted_answer
+            logger.debug(f"[MOCK] Q{question_num}: Predicted answer = {predicted_answer}")
+        
+        return predictions
+    
+    def _format_question_for_gemini(self, question_text: str, answers: List[Dict]) -> str:
+        """Format question for Gemini API."""
+        prompt = f"""Analyze this multiple choice question and determine the most likely correct answer.
+
+QUESTION: {question_text}
+
+ANSWERS:
+"""
+        for ans in answers:
+            letter = ans.get('letter', '')
+            content = ans.get('content', '')
+            prompt += f"{letter}. {content}\n"
+        
+        prompt += """Based on your knowledge, which answer is most likely correct?
+Respond with ONLY the letter (A, B, C, or D) without explanation."""
+        
+        return prompt
+    
+    def _parse_gemini_response(self, response_text: str, valid_options: List[str]) -> Optional[str]:
+        """Parse Gemini response to extract answer letter."""
+        # Clean response
+        response_text = response_text.strip().upper()
+        
+        # Look for first valid letter
+        for char in response_text:
+            if char in valid_options:
+                return char
+        
+        # If no valid letter found, return None
+        return None
 
 
-def create_gemini_service(api_key: str = None) -> GeminiService:
-    """Factory function to create GeminiService instance"""
-    return GeminiService(api_key)
+# Global service instance
+_gemini_service = None
+
+
+def get_gemini_service() -> GeminiService:
+    """Get or create Gemini service instance."""
+    global _gemini_service
+    if _gemini_service is None:
+        _gemini_service = GeminiService()
+    return _gemini_service
+
+
+def analyze_quiz_with_ai(questions: List[Dict]) -> Dict:
+    """Convenience function to analyze quiz."""
+    service = get_gemini_service()
+    return service.analyze_quiz(questions)
