@@ -28,12 +28,12 @@ class GeminiService:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = None
         self.use_mock_mode = False
-        # Try models in order of preference: lightweight → balanced → powerful
+        # Try models in order of preference: stable → fallback
+        # Note: v1beta API may not support all preview models
         self.models_to_try = [
-            "gemini-3.1-flash-lite-preview",  # Latest, ultra-lightweight
-            "gemini-2.5-flash-lite",          # Stable, lightweight
-            "gemini-2.5-flash",               # Stable, balanced
-            "gemini-3.1-flash-preview",       # Newer, more capable
+            "gemini-2.5-flash",          # Stable, recommended
+            "gemini-2.5-pro",            # Stable, more powerful
+            "gemini-pro",                # Fallback, old but reliable
         ]
         
         if self.api_key and HAS_GENAI:
