@@ -10,13 +10,17 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Try to import Google Generative AI
+# Try to import Google AI SDK
 try:
-    import google.generativeai as genai
+    import google.genai as genai
     HAS_GENAI = True
 except ImportError:
-    HAS_GENAI = False
-    logger.warning("google-generativeai not installed. Running in mock mode.")
+    try:
+        import google.generativeai as genai
+        HAS_GENAI = True
+    except ImportError:
+        HAS_GENAI = False
+        logger.warning("google-genai not installed. Running in mock mode.")
 
 
 class GeminiService:
@@ -31,8 +35,9 @@ class GeminiService:
         if self.api_key and HAS_GENAI:
             try:
                 genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
-                logger.info("✅ Gemini API configured successfully")
+                # Try different model options - prefer stable models
+                self.model = genai.GenerativeModel('gemini-pro')
+                logger.info("✅ Gemini API configured successfully with gemini-pro")
             except Exception as e:
                 logger.warning(f"Failed to configure Gemini API: {e}. Falling back to mock mode.")
                 self.use_mock_mode = True

@@ -133,6 +133,11 @@ export default function InteractiveQuiz({ questions, predictions, onUserAnswersC
                         {!isAnswered && (
                           <p style={{ color: '#ff9800' }}>👆 Chọn đáp án của bạn</p>
                         )}
+                        {isAnswered && (
+                          <p style={{ color: '#ffffff', marginBottom: '0.5rem' }}>
+                            Câu trả lời của bạn: <strong style={{ color: '#0066cc', fontSize: '1.1rem' }}>{userAnswer}</strong>
+                          </p>
+                        )}
                         {isAnswered && status === 'correct' && (
                           <p style={{ color: '#28a745' }}>🎉 Câu trả lời đúng!</p>
                         )}

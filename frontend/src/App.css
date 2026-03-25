@@ -11,12 +11,12 @@
   --success-color: #28a745;
   --error-color: #dc3545;
   --warning-color: #ff9800;
-  --bg-color: #ffffff;
-  --text-color: #000000;
-  --border-color: #e0e0e0;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --card-bg: #ffffff;
-  --panel-bg: #f5f5f5;
+  --bg-color: #0a0a0a;
+  --text-color: #ffffff;
+  --border-color: #333333;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --card-bg: #1a1a1a;
+  --panel-bg: #141414;
 }
 
 html,
@@ -40,13 +40,13 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: #ffffff;
+  background: #0a0a0a;
 }
 
 /* Header */
 .app-header {
-  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
-  color: #000000;
+  background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+  color: #ffffff;
   padding: 2rem 1rem;
   box-shadow: var(--shadow);
   text-align: center;
