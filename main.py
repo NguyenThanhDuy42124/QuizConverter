@@ -273,13 +273,10 @@ async def analyze_with_ai(request: ConvertHTMLRequest, db: AsyncSession = Depend
         if not request.html_content.strip():
             raise HTTPException(status_code=400, detail="HTML content is empty")
         
-        # Get Gemini API key
+        # Get Gemini API key (optional for mock mode)
         gemini_key = os.getenv("GEMINI_API_KEY")
         if not gemini_key:
-            raise HTTPException(
-                status_code=500, 
-                detail="GEMINI_API_KEY not configured on server"
-            )
+            print("⚠️  Warning: GEMINI_API_KEY not configured. Using mock predictions.")
         
         # Parse HTML
         from converter import QuizParser
@@ -289,10 +286,10 @@ async def analyze_with_ai(request: ConvertHTMLRequest, db: AsyncSession = Depend
         if not questions:
             raise HTTPException(status_code=400, detail="No questions found in HTML")
         
-        # Initialize Gemini service
+        # Initialize Gemini service (works with or without API key)
         service = GeminiService(gemini_key)
         
-        # Get AI predictions
+        # Get AI predictions (uses mock if no API key)
         predictions = await service.analyze_quiz(questions)
         
         # Attach predictions to questions
@@ -348,10 +345,10 @@ async def export_marked_text_endpoint(request: ConvertHTMLRequest):
         if not request.html_content.strip():
             raise HTTPException(status_code=400, detail="HTML content is empty")
         
-        # Get Gemini API key
+        # Get Gemini API key (optional for mock mode)
         gemini_key = os.getenv("GEMINI_API_KEY")
         if not gemini_key:
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+            print("⚠️  Warning: GEMINI_API_KEY not configured. Using mock predictions.")
         
         # Parse and analyze
         from converter import QuizParser
@@ -400,10 +397,10 @@ async def export_marked_docx_endpoint(request: ConvertHTMLRequest):
         if not request.html_content.strip():
             raise HTTPException(status_code=400, detail="HTML content is empty")
         
-        # Get Gemini API key
+        # Get Gemini API key (optional for mock mode)
         gemini_key = os.getenv("GEMINI_API_KEY")
         if not gemini_key:
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+            print("⚠️  Warning: GEMINI_API_KEY not configured. Using mock predictions.")
         
         # Parse and analyze
         from converter import QuizParser
